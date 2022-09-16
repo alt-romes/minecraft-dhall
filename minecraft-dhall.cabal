@@ -11,7 +11,7 @@ cabal-version:      3.4
 --   http://haskell.org/cabal/users-guide/
 --
 -- The name of the package.
-name:               mcmod-helper
+name:               minecraft-dhall
 
 -- The package version.
 -- See the Haskell package versioning policy (PVP) for standards
@@ -48,12 +48,12 @@ build-type:         Simple
 extra-doc-files:    CHANGELOG.md
 
 -- Extra source files to be distributed with the package, such as examples, or a tutorial module.
--- extra-source-files:
+extra-source-files: Minecraft.dhall
 
 common warnings
     ghc-options: -Wall
 
-executable mcmod-helper
+executable minecraft-dhall
     -- Import common warning flags.
     import:           warnings
 

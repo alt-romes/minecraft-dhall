@@ -6,6 +6,4 @@ let modId = "dimod"
 
 let simpleItems = ["teto_do_127", "ruby", "salsichas"]
 
-in map Text MC.Item
-       (MC.makeSimpleItem modId)
-       simpleItems
+in map Text MC.Item (MC.makeSimpleItem modId) simpleItems

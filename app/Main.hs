@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeApplications #-}
 module Main where
@@ -19,28 +20,60 @@ import System.Directory
 type ModId = String
 
 data Item = Item
-              { fpath :: FilePath
-              , val   :: Value
+              { model_path   :: FilePath
+              , texture_path :: FilePath
+              , model        :: Value
+              } deriving (Generic, Show)
+
+data Block = Block
+              { blockstate_path :: FilePath
+              , blockstate      :: Value
+              , model_path      :: FilePath
+              , model           :: Value
+              , item_model_path :: FilePath
+              , item_model      :: Value
+              , texture_path    :: FilePath
               } deriving (Generic, Show)
 
 instance FromJSON Item
+instance FromJSON Block
 
 main :: IO ()
 main = do
   putStrLn "Welcome to the Minecraft Mod developer toolsuite!"
 
-  putStrLn "This program will generate all model JSONs for items listed in Items.dhall"
+  putStrLn "This program will generate all model JSONs for items listed in Items.dhall and Blocks.dhall"
 
   Right itemsJSON <- dhallToJSON <$> (inputExpr =<< Data.Text.IO.readFile "Items.dhall")
-
   Success items <- pure $ fromJSON @[Item] itemsJSON
 
   forM_ items $ \i -> do
-    createDirectoryIfMissing True (takeDirectory i.fpath)
-    encodeFile i.fpath i.val
+    createDirectoryIfMissing True (takeDirectory i.model_path)
+    encodeFile i.model_path i.model
 
+    texExists <- doesFileExist i.texture_path
+    unless texExists $ do
+      putStrLn $ "Warning: Texture file " <> i.texture_path <> " doesn't exist."
 
-  print items
+  Right blocksJSON <- dhallToJSON <$> (inputExpr =<< Data.Text.IO.readFile "Blocks.dhall")
+  Success blocks <- pure $ fromJSON @[Block] blocksJSON
+
+  forM_ blocks $ \b -> do
+    -- blockstate
+    createDirectoryIfMissing True (takeDirectory b.blockstate_path)
+    encodeFile b.blockstate_path b.blockstate
+
+    -- model
+    createDirectoryIfMissing True (takeDirectory b.model_path)
+    encodeFile b.model_path b.model
+
+    -- item model
+    createDirectoryIfMissing True (takeDirectory b.item_model_path)
+    encodeFile b.item_model_path b.item_model
+
+    texExists <- doesFileExist b.texture_path
+    unless texExists $ do
+      putStrLn $ "Warning: Texture file " <> b.texture_path <> " doesn't exist."
 
 
 -- data Command = NewItem
