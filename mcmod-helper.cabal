@@ -67,7 +67,9 @@ executable mcmod-helper
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base >=4.14, dhall
+    build-depends:    base >=4.14, text,
+                      directory, filepath,
+                      mtl, dhall, dhall-json, aeson
 
     -- Directories containing source files.
     hs-source-dirs:   app

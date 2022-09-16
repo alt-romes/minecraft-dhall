@@ -1,11 +1,20 @@
+let ModId : Type = Text
+
 let Item : Type
-  = { parent : Text
-    , textures : { layer0 : Text }
+  = { fpath : Text
+    , val   : { parent : Text
+              , textures : { layer0 : Text }
+              }
     }
 
-let makeItem : Text -> Text -> Item
+-- | Make a simple item given a ModId and an item name
+let makeSimpleItem : ModId -> Text -> Item
     = λ(modId : Text) -> λ(itemName : Text) ->
-    { parent   = "item/generated"
-    , textures = { layer0 = "${modId}:item/${itemName}" } }
+    { fpath = "./resources/assets/${modId}/models/item/${itemName}.json"
+    , val  = { parent = "item/generated"
+             , textures = { layer0 = "${modId}:item/${itemName}" }
+             }
+    }
+
   
-in {Item, makeItem}
+in {ModId, Item, makeSimpleItem}
