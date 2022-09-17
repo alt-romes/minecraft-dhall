@@ -3,6 +3,8 @@ Minecraft Dhall
 
 A configuration tool for developing minecraft mods without JSON hell.
 
+This is a draft/work in progress!
+
 ## How to use
 
 At the root of your minecraft mod you should add the following files.
