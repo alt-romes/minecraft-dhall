@@ -18,20 +18,26 @@ import Dhall.JSON
 
 import Control.Monad
 
+import qualified System.IO
+import qualified System.Environment
 import System.FilePath
 import System.Directory
 
 type ModId = String
 
 data Item = Item
-              { model_path   :: FilePath
+              { modId        :: String
+              , name         :: String
+              , model_path   :: FilePath
               , texture_path :: Maybe FilePath
               , model        :: Value
               , tags         :: [Tag]
               } deriving (Generic, Show)
 
 data Block = Block
-              { blockstate_path :: FilePath
+              { modId           :: String
+              , name            :: String
+              , blockstate_path :: FilePath
               , model_path      :: FilePath
               , texture_path    :: Maybe FilePath
               , blockstate      :: Value
@@ -70,15 +76,11 @@ loadDhallAsJSON fp = do
   Success val <- pure $ fromJSON asJSON
   pure val
 
-createTagDefs :: [TagDef] -> [Tag] -> IO ()
-createTagDefs defs tags =
-  let
-      tagMap  = M.fromList $ map (\d -> (d.tag_path, d)) defs
-      tagMap' = foldr (\t -> M.alter (insertOrUpdateTag t) t.tag_path) tagMap tags
-   in
-      forM_ (M.elems tagMap') $ \d ->
-        createDirAndEncodeFile d.tag_path (toJSON d)
 
+makeTagDefs :: [TagDef] -> [Tag] -> [TagDef]
+makeTagDefs defs tags =
+  let tagMap  = M.fromList $ map (\d -> (d.tag_path, d)) defs
+   in M.elems $ foldr (\t -> M.alter (insertOrUpdateTag t) t.tag_path) tagMap tags
   where
     insertOrUpdateTag :: Tag -> Maybe TagDef -> Maybe TagDef
     insertOrUpdateTag t = \case
@@ -86,14 +88,18 @@ createTagDefs defs tags =
       Just (TagDef p r vals) -> Just (TagDef p r (t.value:vals))
 
 
+
+
 validateTexture :: Maybe FilePath -> IO ()
 validateTexture = \case
   Nothing -> pure ()
-  Just tp -> doesFileExist tp >>= flip unless (putStrLn $ "Warning: Texture file " <> tp <> " doesn't exist.")
+  Just tp -> doesFileExist tp >>= flip unless (System.IO.hPutStrLn System.IO.stderr $ "Warning: Texture file " <> tp <> " doesn't exist.")
 
 
 processItem :: Item -> IO ()
 processItem i = do
+
+    putStrLn $ "Generating item " <> i.modId <> ":" <> i.name
 
     createDirAndEncodeFile i.model_path i.model
 
@@ -102,6 +108,8 @@ processItem i = do
 
 processBlock :: Block -> IO ()
 processBlock b = do
+
+    putStrLn $ "Generating block " <> b.modId <> ":" <> b.name
 
     -- blockstate
     createDirAndEncodeFile b.blockstate_path b.blockstate
@@ -114,12 +122,15 @@ processBlock b = do
 
     validateTexture b.texture_path
 
+delFile :: FilePath -> IO ()
+delFile p = do
+  fileExists <- doesFileExist p
+  when fileExists (removeFile p)
+
 
 main :: IO ()
 main = do
   putStrLn "Welcome to the Minecraft Mod developer toolsuite!"
-
-  putStrLn "This program will generate all model JSONs for items listed in Items.dhall and Blocks.dhall"
 
   -- TODO:
   -- baseTagDefs <- loadDhallAsJSON @[TagDef] "Tags.dhall"
@@ -129,10 +140,35 @@ main = do
   blocks <- loadDhallAsJSON @[Block] "Blocks.dhall"
 
   let allTags = concatMap (.tags) items <> concatMap (.tags) blocks
+      tagDefs = makeTagDefs baseTagDefs allTags
 
-  createTagDefs baseTagDefs allTags
+  [arg] <- System.Environment.getArgs
 
-  forM_ items processItem
+  case arg of
+    "generate" -> do
 
-  forM_ blocks processBlock
+      forM_ tagDefs $ \d ->
+        createDirAndEncodeFile d.tag_path (toJSON d)
+
+      forM_ items processItem
+
+      forM_ blocks processBlock
+
+    "clean"    -> do
+
+      forM_ tagDefs (delFile . (.tag_path))
+
+      forM_ items $ \i -> delFile i.model_path
+
+      forM_ blocks $ \b -> do
+        delFile b.model_path
+        delFile b.blockstate_path
+        delFile b.assoc_item.model_path
+
+    _ -> do
+      putStrLn
+        "Valid args:\
+        \  generate: generate all JSONs for items listed in Items.dhall and blocks listed Blocks.dhall"
+
+
 
