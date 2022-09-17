@@ -3,47 +3,87 @@
 -- to type arbitrary json
 
 let JSON = https://prelude.dhall-lang.org/JSON/package.dhall
+let map = https://prelude.dhall-lang.org/List/map.dhall
 
 let ModId : Type = Text
 
 let assets_path = "./src/main/resources/assets"
+let data_path = "./src/main/resources/data"
+
+let Model : Type = { parent   : Text
+                   , textures : Optional JSON.Type }
+
+let Tag : Type = { tag_path : Text
+                 , value    : Text
+                 }
 
 let Item : Type
-  = { model_path : Text
+  = { modId        : Text
+    , name         : Text
+    , model_path   : Text
     , texture_path : Text
-    , model   : { parent : Text , textures : { layer0 : Text } }
+    , model        : Model
+    , tags         : List Tag
     }
+
+let Block : Type = { modId           : Text
+                   , name            : Text
+                   , blockstate_path : Text
+                   , model_path      : Text
+                   , item_model_path : Text
+                   , texture_path    : Text
+                   , blockstate      : { variants : JSON.Type }
+                   , model           : Model
+                   , item_model      : Model
+                   , tags            : List Tag
+                   }
+
+-- | Given a 'ModId' (also known as 'namespace'), a list of `tag name`s, and a block, add the tags to the block.
+-- e.g. addTagToBlock woodBlock "minecraft" ["mineable/axe", "needs_diamond_tool"]
+let addTagsToBlock : ModId -> List Text -> Block -> Block
+  = λ(namespace : Text) -> λ(tagNames : List Text) -> λ(b : Block) ->
+  let toTag = \(name : Text) ->
+                { tag_path = "${data_path}/${namespace}/tags/blocks/${name}.json"
+                , value    = "${b.modId}:${b.name}" }
+   in b // {tags = (map Text Tag toTag tagNames) # b.tags }
+
+-- | TODO: Like addTagsToBlock
+let addTagsToItem : ModId -> List Text -> Item -> Item
+  = λ(namespace : Text) -> λ(tagNames : List Text) -> λ(i : Item) ->
+  let toTag = \(name : Text) ->
+                { tag_path = "${data_path}/${namespace}/tags/blocks/${name}.json"
+                , value    = "${i.modId}:${i.name}" }
+   in i // {tags = (map Text Tag toTag tagNames) # i.tags }
 
 -- | Make a simple item given a ModId and an item name
 let makeSimpleItem : ModId -> Text -> Item
   = λ(modId : Text) -> λ(itemName : Text) ->
-    { model_path   = "${assets_path}/${modId}/models/item/${itemName}.json"
+    { modId        = modId
+    , name         = itemName
+    , model_path   = "${assets_path}/${modId}/models/item/${itemName}.json"
     , texture_path = "${assets_path}/${modId}/textures/item/${itemName}.png"
     , model = { parent = "item/generated"
-              , textures = { layer0 = "${modId}:item/${itemName}" }
+              , textures = Some (JSON.object (toMap { layer0 = JSON.string "${modId}:item/${itemName}" }))
               }
+    , tags  = [] : List Tag
     }
 
-let Block : Type
-  = { blockstate_path : Text
-    , blockstate : { variants : JSON.Type }
-    , model_path : Text
-    , model : { parent : Text, textures : JSON.Type }
-    , item_model_path : Text
-    , item_model : { parent : Text }
-    , texture_path : Text
-    }
-
-
+-- | Make a simple block given a ModId and a block name
 let makeSimpleBlock : ModId -> Text -> Block
   = λ(modId : Text) -> λ(blockName : Text) ->
-  { blockstate_path = "${assets_path}/${modId}/blockstates/${blockName}.json"
-  , blockstate      = {variants = JSON.object [{mapKey = "", mapValue = JSON.object [{mapKey = "model", mapValue = JSON.string "${modId}:block/${blockName}"}]}]}
-  , model_path      = "${assets_path}/${modId}/models/block/${blockName}.json"
-  , model           = {parent = "block/cube_all", textures = JSON.object [{mapKey = "all", mapValue = JSON.string "${modId}:block/${blockName}"}]}
-  , item_model_path = "${assets_path}/${modId}/models/item/${blockName}.json"
-  , item_model      = {parent = "${modId}:block/${blockName}"}
-  , texture_path    = "${assets_path}/${modId}/textures/block/${blockName}.png"
-  }
+    { modId           = modId
+    , name            = blockName
+    , blockstate_path = "${assets_path}/${modId}/blockstates/${blockName}.json"
+    , model_path      = "${assets_path}/${modId}/models/block/${blockName}.json"
+    , item_model_path = "${assets_path}/${modId}/models/item/${blockName}.json" -- TODO: Should probably be decoupled.
+    , texture_path    = "${assets_path}/${modId}/textures/block/${blockName}.png"
+    , blockstate      = {variants = JSON.object [{mapKey = "", mapValue = JSON.object (toMap {model = JSON.string "${modId}:block/${blockName}"})}]}
+    , model           = {parent = "block/cube_all", textures = Some (JSON.object (toMap {all = JSON.string "${modId}:block/${blockName}"}))}
+    , item_model      = {parent = "${modId}:block/${blockName}", textures = None JSON.Type} -- TODO: Should probably be decoupled. Provide "Item from block" function
+    , tags            = [] : List Tag
+    }
+
+-- TODO: Needed for Tags.dhall which should define the base tags to which the block values are appended
+let TagDef : Type = {replace : Bool, values : List Text}
   
-in {ModId, Item, makeSimpleItem, Block, makeSimpleBlock}
+in {ModId, Model, Tag, Item, Block, makeSimpleItem, makeSimpleBlock, addTagsToBlock, addTagsToItem}

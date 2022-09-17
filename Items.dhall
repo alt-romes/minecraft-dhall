@@ -1,4 +1,4 @@
-let MC = ./minecraft-prelude.dhall
+let MC = ./Minecraft.dhall
 
 let map = https://prelude.dhall-lang.org/v21.0.0/List/map.dhall
 

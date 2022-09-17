@@ -1,15 +1,19 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeApplications #-}
 module Main where
 
 import GHC.Generics
 
+import qualified Data.Map as M
+
 import qualified Data.Text.IO
 import Data.Aeson
-import Dhall
+import Dhall hiding (map)
 import Dhall.JSON
 
 import Control.Monad
@@ -23,6 +27,7 @@ data Item = Item
               { model_path   :: FilePath
               , texture_path :: FilePath
               , model        :: Value
+              , tags            :: [Tag]
               } deriving (Generic, Show)
 
 data Block = Block
@@ -33,10 +38,61 @@ data Block = Block
               , item_model_path :: FilePath
               , item_model      :: Value
               , texture_path    :: FilePath
+              , tags            :: [Tag]
+              } deriving (Generic, Show)
+
+data Tag = Tag
+              { tag_path :: String
+              , value    :: String
+              } deriving (Generic, Show)
+
+data TagDef = TagDef
+              { tag_path :: FilePath
+              , replace  :: Bool
+              , values   :: [String]
               } deriving (Generic, Show)
 
 instance FromJSON Item
 instance FromJSON Block
+instance FromJSON Tag
+instance FromJSON TagDef
+
+instance ToJSON TagDef where
+  toJSON (TagDef _ r v) = object [ "replace" .= r, "values" .= v ]
+
+createDirAndEncodeFile :: FilePath -> Value -> IO ()
+createDirAndEncodeFile fp val = do
+  createDirectoryIfMissing True (takeDirectory fp)
+  encodeFile fp val
+
+loadDhallAsJSON :: FromJSON a => FilePath -> IO a
+loadDhallAsJSON fp = do
+  Right asJSON  <- dhallToJSON <$> (inputExpr =<< Data.Text.IO.readFile fp)
+  Success val <- pure $ fromJSON asJSON
+  pure val
+
+createTagDefs :: [TagDef] -> [Tag] -> IO ()
+createTagDefs defs tags =
+  let
+      tagMap  = M.fromList $ map (\d -> (d.tag_path, d)) defs
+      tagMap' = foldr (\t -> M.alter (insertOrUpdateTag t) t.tag_path) tagMap tags
+   in do
+      print tags
+      print tagMap'
+      forM_ (M.elems tagMap') $ \d -> do
+        print d.tag_path
+        createDirAndEncodeFile d.tag_path (toJSON d)
+
+  where
+    insertOrUpdateTag :: Tag -> Maybe TagDef -> Maybe TagDef
+    insertOrUpdateTag t = \case
+      Nothing -> Just (TagDef t.tag_path False [t.value])
+      Just (TagDef p r vals) -> Just (TagDef p r (t.value:vals))
+
+      
+
+
+
 
 main :: IO ()
 main = do
@@ -44,101 +100,36 @@ main = do
 
   putStrLn "This program will generate all model JSONs for items listed in Items.dhall and Blocks.dhall"
 
-  Right itemsJSON <- dhallToJSON <$> (inputExpr =<< Data.Text.IO.readFile "Items.dhall")
-  Success items <- pure $ fromJSON @[Item] itemsJSON
+  -- TODO:
+  -- baseTagDefs <- loadDhallAsJSON @[TagDef] "Tags.dhall"
+  let baseTagDefs = []
+
+  items  <- loadDhallAsJSON @[Item]  "Items.dhall"
+  blocks <- loadDhallAsJSON @[Block] "Blocks.dhall"
+
+  let allTags = concatMap (.tags) items <> concatMap (.tags) blocks
+
+  createTagDefs baseTagDefs allTags
 
   forM_ items $ \i -> do
-    createDirectoryIfMissing True (takeDirectory i.model_path)
-    encodeFile i.model_path i.model
+    createDirAndEncodeFile i.model_path i.model
 
     texExists <- doesFileExist i.texture_path
     unless texExists $ do
       putStrLn $ "Warning: Texture file " <> i.texture_path <> " doesn't exist."
 
-  Right blocksJSON <- dhallToJSON <$> (inputExpr =<< Data.Text.IO.readFile "Blocks.dhall")
-  Success blocks <- pure $ fromJSON @[Block] blocksJSON
-
   forM_ blocks $ \b -> do
+
     -- blockstate
-    createDirectoryIfMissing True (takeDirectory b.blockstate_path)
-    encodeFile b.blockstate_path b.blockstate
+    createDirAndEncodeFile b.blockstate_path b.blockstate
 
     -- model
-    createDirectoryIfMissing True (takeDirectory b.model_path)
-    encodeFile b.model_path b.model
+    createDirAndEncodeFile b.model_path b.model
 
     -- item model
-    createDirectoryIfMissing True (takeDirectory b.item_model_path)
-    encodeFile b.item_model_path b.item_model
+    createDirAndEncodeFile b.item_model_path b.item_model
 
     texExists <- doesFileExist b.texture_path
     unless texExists $ do
       putStrLn $ "Warning: Texture file " <> b.texture_path <> " doesn't exist."
-
-
--- data Command = NewItem
---              | NewBlock
---              | Unknown
---              deriving Read
-
--- eval :: ModId -> Command -> IO ()
--- eval modid = \case
---   NewItem -> do
---       putStrLn "Creating a new item..."
---       putStrLn "What's the name of the new item?"
---       itemName <- getLine
-
---       let
---           model_path   = "/resources/assets/" <> modid <> "/models/item/" <> itemName <> ".json"
---           texture_path = "/resources/assets/" <> modid <> "/textures/item/" <> itemName <> ".png"
-
---       putStrLn $ "Make sure that the ./tmp/ folder has the texture named " <> itemName <> ".png, then press enter."
---       _ <- getLine
-
---       putStrLn $ "Adding item model at " <> model_path
-
---       putStrLn $ "Adding item texture at " <> texture_path
-
---       putStrLn "Register the item as desired. Here's a base:"
---       putStrLn $ "public static final Item " <> map C.toUpper itemName <> "= new Item(new FabricItemSettings());"
---       putStrLn $ "public static final Item " <> map C.toUpper itemName <> "= new Item(new FabricItemSettings());"
-
---   NewBlock -> undefined
---   Unknown -> putStrLn "Unknown command"
-
-
-
--- main :: IO ()
--- main = do
---   -- clearScreen
---   -- setCursorPosition 0 0
-
---   -- setSGR [SetColor Foreground Vivid Green]
---   putStrLn "Welcome to the Minecraft Mod developer tool suite!"
---   -- setSGR [Reset]
-
---   putStrLn "What's the name of your mod?"
---   modName <- getLine
-  
---   loop modName
-
---   where
-
---     loop :: String -> IO ()
---     loop modName = do
-
---       putStrLn "Choose an action."
-
---       putStrLn "Available actions: new_item"
-
---       eval modName . fromMaybe Unknown . readMaybe =<< getLine
-
---       loop modName
-
--- -- blue :: String -> IO ()
--- -- blue s = do
--- --   setSGR [SetColor Foreground Vivid Blue]
--- --   putStrLn s
--- --   setSGR [Reset]
--- --   putStr ""
 
