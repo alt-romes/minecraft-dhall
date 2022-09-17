@@ -1,8 +1,11 @@
 let MC = ./Minecraft.dhall
 
-let modId = "dimod"
+let modId = "tutorial"
 
-let block_n2 = MC.addTagsToBlock "minecraft" ["mineable/pickaxe", "needs_diamond_tool"]
-              (MC.makeSimpleBlock modId "block_with_tags")
+in [ -- Simple block
+     MC.makeSimpleBlock modId "new_dirt"
 
-in [block_n2]
+     -- Block with added tags to be mineable with an iron axe
+   , MC.addTagsToBlock "minecraft" ["mineable/axe", "needs_iron_tool"]
+       (MC.makeSimpleBlock modId "special_log")
+   ]
