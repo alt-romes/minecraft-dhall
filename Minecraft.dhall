@@ -34,6 +34,8 @@ let Block : Type = { modId           : Text
                    , blockstate      : { variants : JSON.Type }
                    , model           : Model
                    , assoc_item      : Item
+                   , loot_table_path : Text
+                   , loot_table      : JSON.Type
                    , tags            : List Tag
                    }
 
@@ -53,6 +55,8 @@ let addTagsToItem : ModId -> List Text -> Item -> Item
                 { tag_path = "${data_path}/${namespace}/tags/blocks/${name}.json"
                 , value    = "${i.modId}:${i.name}" }
    in i // {tags = (map Text Tag toTag tagNames) # i.tags }
+
+-- TODO: Call them just makeItem and makeBlock
 
 -- | Make a simple item given a ModId and an item name
 let makeSimpleItem : ModId -> Text -> Item
@@ -75,9 +79,14 @@ let makeSimpleBlock : ModId -> Text -> Block
     , blockstate_path = "${assets_path}/${modId}/blockstates/${blockName}.json"
     , model_path      = "${assets_path}/${modId}/models/block/${blockName}.json"
     , texture_path    = Some "${assets_path}/${modId}/textures/block/${blockName}.png"
+    , loot_table_path = "${data_path}/${modId}/loot_tables/blocks/${blockName}.json"
     , blockstate      = {variants = JSON.object [{mapKey = "", mapValue = JSON.object (toMap {model = JSON.string "${modId}:block/${blockName}"})}]}
     , model           = {parent = "block/cube_all", textures = Some (JSON.object (toMap {all = JSON.string "${modId}:block/${blockName}"}))}
     , assoc_item      = makeSimpleItem modId blockName // {model = {parent = "${modId}:block/${blockName}", textures = None JSON.Type}, texture_path = None Text}
+    , loot_table      = JSON.object (toMap { type = JSON.string "minecraft:block"
+                                           , pools = JSON.array [JSON.object (toMap { rolls = JSON.natural 1
+                                                                                    , entries = JSON.array [JSON.object (toMap { type = JSON.string "minecraft:item"
+                                                                                                                               , name = JSON.string "${modId}:${blockName}" })] })] })
     , tags            = [] : List Tag
     }
 

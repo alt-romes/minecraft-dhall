@@ -18,6 +18,7 @@ import Dhall hiding (map)
 import Dhall.JSON
 
 import Control.Monad
+import qualified Control.Exception
 
 import qualified System.IO
 import qualified System.Environment
@@ -44,6 +45,8 @@ data Block = Block
               , blockstate      :: Value
               , model           :: Model
               , assoc_item      :: Item
+              , loot_table_path :: FilePath
+              , loot_table      :: Value
               , tags            :: [Tag]
               } deriving (Generic, Show)
 
@@ -83,10 +86,12 @@ createDirAndEncodeFile fp (toJSON -> val) = do
 
 loadDhallAsJSON :: FromJSON a => FilePath -> IO a
 loadDhallAsJSON fp = do
-  Right asJSON  <- dhallToJSON <$> (inputExpr =<< Data.Text.IO.readFile fp)
-  Success val <- pure $ fromJSON asJSON
-  pure val
-
+  dhallToJSON <$> (inputExpr =<< Data.Text.IO.readFile fp) >>= \case
+    Left  e      -> Control.Exception.throwIO e
+    Right asJSON ->
+      case fromJSON asJSON of
+        Success val -> pure val
+        Error   e   -> fail e
 
 makeTagDefs :: [TagDef] -> [Tag] -> [TagDef]
 makeTagDefs defs tags =
@@ -129,6 +134,10 @@ processBlock b = do
     -- associated item
     processItem (b.assoc_item)
 
+    -- loot table
+    createDirAndEncodeFile b.loot_table_path b.loot_table
+
+
     validateTexture b.texture_path
 
 delFile :: FilePath -> IO ()
@@ -150,10 +159,10 @@ main = do
   let allTags = concatMap (.tags) items <> concatMap (.tags) blocks
       tagDefs = makeTagDefs baseTagDefs allTags
 
-  [arg] <- System.Environment.getArgs
+  args <- System.Environment.getArgs
 
-  case arg of
-    "generate" -> do
+  case args of
+    "generate":_ -> do
 
       forM_ tagDefs $ \d ->
         createDirAndEncodeFile d.tag_path d
@@ -162,7 +171,7 @@ main = do
 
       forM_ blocks processBlock
 
-    "clean"    -> do
+    "clean":_  -> do
 
       forM_ tagDefs (delFile . (.tag_path))
 
@@ -175,7 +184,7 @@ main = do
 
     _ -> do
       putStrLn
-        "Valid args:\
+        "Valid args:\n\
         \  generate: generate all JSONs for items listed in Items.dhall and blocks listed Blocks.dhall"
 
 
