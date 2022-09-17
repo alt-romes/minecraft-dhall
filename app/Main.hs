@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE DuplicateRecordFields #-}
@@ -30,7 +31,7 @@ data Item = Item
               , name         :: String
               , model_path   :: FilePath
               , texture_path :: Maybe FilePath
-              , model        :: Value
+              , model        :: Model
               , tags         :: [Tag]
               } deriving (Generic, Show)
 
@@ -41,9 +42,14 @@ data Block = Block
               , model_path      :: FilePath
               , texture_path    :: Maybe FilePath
               , blockstate      :: Value
-              , model           :: Value
+              , model           :: Model
               , assoc_item      :: Item
               , tags            :: [Tag]
+              } deriving (Generic, Show)
+
+data Model = Model
+              { parent :: String
+              , textures :: Maybe Value
               } deriving (Generic, Show)
 
 data Tag = Tag
@@ -59,14 +65,19 @@ data TagDef = TagDef
 
 instance FromJSON Item
 instance FromJSON Block
+instance FromJSON Model
 instance FromJSON Tag
 instance FromJSON TagDef
+
+instance ToJSON Model where
+  toJSON (Model p Nothing)   = object [ "parent" .= p ]
+  toJSON (Model p (Just ts)) = object [ "parent" .= p, "textures" .= ts ]
 
 instance ToJSON TagDef where
   toJSON (TagDef _ r v) = object [ "replace" .= r, "values" .= v ]
 
-createDirAndEncodeFile :: FilePath -> Value -> IO ()
-createDirAndEncodeFile fp val = do
+createDirAndEncodeFile :: ToJSON a => FilePath -> a -> IO ()
+createDirAndEncodeFile fp (toJSON -> val) = do
   createDirectoryIfMissing True (takeDirectory fp)
   encodeFile fp val
 
@@ -86,8 +97,6 @@ makeTagDefs defs tags =
     insertOrUpdateTag t = \case
       Nothing -> Just (TagDef t.tag_path False [t.value])
       Just (TagDef p r vals) -> Just (TagDef p r (t.value:vals))
-
-
 
 
 validateTexture :: Maybe FilePath -> IO ()
@@ -127,7 +136,6 @@ delFile p = do
   fileExists <- doesFileExist p
   when fileExists (removeFile p)
 
-
 main :: IO ()
 main = do
   putStrLn "Welcome to the Minecraft Mod developer toolsuite!"
@@ -148,7 +156,7 @@ main = do
     "generate" -> do
 
       forM_ tagDefs $ \d ->
-        createDirAndEncodeFile d.tag_path (toJSON d)
+        createDirAndEncodeFile d.tag_path d
 
       forM_ items processItem
 
