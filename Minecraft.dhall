@@ -21,7 +21,7 @@ let Item : Type
   = { modId        : Text
     , name         : Text
     , model_path   : Text
-    , texture_path : Text
+    , texture_path : Optional Text
     , model        : Model
     , tags         : List Tag
     }
@@ -30,11 +30,10 @@ let Block : Type = { modId           : Text
                    , name            : Text
                    , blockstate_path : Text
                    , model_path      : Text
-                   , item_model_path : Text
-                   , texture_path    : Text
+                   , texture_path    : Optional Text
                    , blockstate      : { variants : JSON.Type }
                    , model           : Model
-                   , item_model      : Model
+                   , assoc_item      : Item
                    , tags            : List Tag
                    }
 
@@ -61,7 +60,7 @@ let makeSimpleItem : ModId -> Text -> Item
     { modId        = modId
     , name         = itemName
     , model_path   = "${assets_path}/${modId}/models/item/${itemName}.json"
-    , texture_path = "${assets_path}/${modId}/textures/item/${itemName}.png"
+    , texture_path = Some "${assets_path}/${modId}/textures/item/${itemName}.png"
     , model = { parent = "item/generated"
               , textures = Some (JSON.object (toMap { layer0 = JSON.string "${modId}:item/${itemName}" }))
               }
@@ -75,11 +74,10 @@ let makeSimpleBlock : ModId -> Text -> Block
     , name            = blockName
     , blockstate_path = "${assets_path}/${modId}/blockstates/${blockName}.json"
     , model_path      = "${assets_path}/${modId}/models/block/${blockName}.json"
-    , item_model_path = "${assets_path}/${modId}/models/item/${blockName}.json" -- TODO: Should probably be decoupled.
-    , texture_path    = "${assets_path}/${modId}/textures/block/${blockName}.png"
+    , texture_path    = Some "${assets_path}/${modId}/textures/block/${blockName}.png"
     , blockstate      = {variants = JSON.object [{mapKey = "", mapValue = JSON.object (toMap {model = JSON.string "${modId}:block/${blockName}"})}]}
     , model           = {parent = "block/cube_all", textures = Some (JSON.object (toMap {all = JSON.string "${modId}:block/${blockName}"}))}
-    , item_model      = {parent = "${modId}:block/${blockName}", textures = None JSON.Type} -- TODO: Should probably be decoupled. Provide "Item from block" function
+    , assoc_item      = makeSimpleItem modId blockName // {model = {parent = "${modId}:block/${blockName}", textures = None JSON.Type}, texture_path = None Text}
     , tags            = [] : List Tag
     }
 

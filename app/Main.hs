@@ -25,19 +25,18 @@ type ModId = String
 
 data Item = Item
               { model_path   :: FilePath
-              , texture_path :: FilePath
+              , texture_path :: Maybe FilePath
               , model        :: Value
-              , tags            :: [Tag]
+              , tags         :: [Tag]
               } deriving (Generic, Show)
 
 data Block = Block
               { blockstate_path :: FilePath
-              , blockstate      :: Value
               , model_path      :: FilePath
+              , texture_path    :: Maybe FilePath
+              , blockstate      :: Value
               , model           :: Value
-              , item_model_path :: FilePath
-              , item_model      :: Value
-              , texture_path    :: FilePath
+              , assoc_item      :: Item
               , tags            :: [Tag]
               } deriving (Generic, Show)
 
@@ -76,11 +75,8 @@ createTagDefs defs tags =
   let
       tagMap  = M.fromList $ map (\d -> (d.tag_path, d)) defs
       tagMap' = foldr (\t -> M.alter (insertOrUpdateTag t) t.tag_path) tagMap tags
-   in do
-      print tags
-      print tagMap'
-      forM_ (M.elems tagMap') $ \d -> do
-        print d.tag_path
+   in
+      forM_ (M.elems tagMap') $ \d ->
         createDirAndEncodeFile d.tag_path (toJSON d)
 
   where
@@ -89,9 +85,34 @@ createTagDefs defs tags =
       Nothing -> Just (TagDef t.tag_path False [t.value])
       Just (TagDef p r vals) -> Just (TagDef p r (t.value:vals))
 
-      
+
+validateTexture :: Maybe FilePath -> IO ()
+validateTexture = \case
+  Nothing -> pure ()
+  Just tp -> doesFileExist tp >>= flip unless (putStrLn $ "Warning: Texture file " <> tp <> " doesn't exist.")
 
 
+processItem :: Item -> IO ()
+processItem i = do
+
+    createDirAndEncodeFile i.model_path i.model
+
+    validateTexture i.texture_path
+
+
+processBlock :: Block -> IO ()
+processBlock b = do
+
+    -- blockstate
+    createDirAndEncodeFile b.blockstate_path b.blockstate
+
+    -- model
+    createDirAndEncodeFile b.model_path b.model
+
+    -- associated item
+    processItem (b.assoc_item)
+
+    validateTexture b.texture_path
 
 
 main :: IO ()
@@ -111,25 +132,7 @@ main = do
 
   createTagDefs baseTagDefs allTags
 
-  forM_ items $ \i -> do
-    createDirAndEncodeFile i.model_path i.model
+  forM_ items processItem
 
-    texExists <- doesFileExist i.texture_path
-    unless texExists $ do
-      putStrLn $ "Warning: Texture file " <> i.texture_path <> " doesn't exist."
-
-  forM_ blocks $ \b -> do
-
-    -- blockstate
-    createDirAndEncodeFile b.blockstate_path b.blockstate
-
-    -- model
-    createDirAndEncodeFile b.model_path b.model
-
-    -- item model
-    createDirAndEncodeFile b.item_model_path b.item_model
-
-    texExists <- doesFileExist b.texture_path
-    unless texExists $ do
-      putStrLn $ "Warning: Texture file " <> b.texture_path <> " doesn't exist."
+  forM_ blocks processBlock
 
