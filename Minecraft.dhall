@@ -1,8 +1,5 @@
--- TODO: Can use:
--- let JSON/Type = https://prelude.dhall-lang.org/JSON/Type
--- to type arbitrary json
-
 let JSON = https://prelude.dhall-lang.org/JSON/package.dhall
+let Map = https://prelude.dhall-lang.org/Map/Type.dhall
 let map = https://prelude.dhall-lang.org/List/map.dhall
 
 let ModId : Type = Text
@@ -24,6 +21,7 @@ let Item : Type
     , texture_path : Optional Text
     , model        : Model
     , tags         : List Tag
+    , lang         : Map Text Text
     }
 
 let Block : Type = { modId           : Text
@@ -37,6 +35,7 @@ let Block : Type = { modId           : Text
                    , loot_table_path : Text
                    , loot_table      : JSON.Type
                    , tags            : List Tag
+                   , lang            : Map Text Text
                    }
 
 -- | Given a 'ModId' (also known as 'namespace'), a list of `tag name`s, and a block, add the tags to the block.
@@ -69,6 +68,7 @@ let makeSimpleItem : ModId -> Text -> Item
               , textures = Some (JSON.object (toMap { layer0 = JSON.string "${modId}:item/${itemName}" }))
               }
     , tags  = [] : List Tag
+    , lang  = toMap {en_us = "${itemName}"}
     }
 
 -- | Make a simple block given a ModId and a block name
@@ -88,6 +88,7 @@ let makeSimpleBlock : ModId -> Text -> Block
                                                                                     , entries = JSON.array [JSON.object (toMap { type = JSON.string "minecraft:item"
                                                                                                                                , name = JSON.string "${modId}:${blockName}" })] })] })
     , tags            = [] : List Tag
+    , lang  = toMap {en_us = "${blockName}"}
     }
 
 -- TODO: Needed for Tags.dhall which should define the base tags to which the block values are appended
