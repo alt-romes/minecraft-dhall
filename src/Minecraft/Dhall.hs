@@ -23,8 +23,6 @@ import Data.Aeson
 
 import Control.Monad.Writer
 
--- import System.FilePath
-
 type ModId = String
 
 -- TODO: Error on overlap using newtype instance for Semigroup!
@@ -128,12 +126,12 @@ instance FromJSON LangAssociations where
                                   v <- o .: "mapValue"
                                   pure (M.insert k v acc)) mempty)
 
-type MinecraftWriter = Writer (Tags, Langs, FilesToWrite)
+type MinecraftWriterT = WriterT (Tags, Langs, FilesToWrite)
 
-runMinecraftWriter :: MinecraftWriter a -> FilesToWrite
-runMinecraftWriter act =
-  let (tags, langs, files) = execWriter act
-   in (produceFilesToWrite tags <> produceFilesToWrite langs <> files)
+runMinecraftWriterT :: Monad m => MinecraftWriterT m a -> m FilesToWrite
+runMinecraftWriterT act = do
+  (tags, langs, files) <- execWriterT act
+  pure (produceFilesToWrite tags <> produceFilesToWrite langs <> files)
 
 langPath :: ModId -> FilePath
 langPath modId = "./src/main/resources/assets/" <> modId <> "/lang/"
@@ -151,7 +149,7 @@ makeLangsFromXWithAssocs = Langs . M.fromListWith (<>) . transform
       | otherwise = error "unexpected unsupported type"
 
 
-processItem :: Item -> MinecraftWriter ()
+processItem :: Monad m => Item -> MinecraftWriterT m ()
 processItem i =
   let
       tags  = Tags $ M.fromList (map (\(Tag p v) -> (p, TagDef False [v])) i.tags)
@@ -161,7 +159,7 @@ processItem i =
       tell (tags, langs, files)
 
 
-processBlock :: Block -> MinecraftWriter ()
+processBlock :: Monad m => Block -> MinecraftWriterT m ()
 processBlock b =
   let
       tags  = Tags $ M.fromList (map (\(Tag p v) -> (p, TagDef False [v])) b.tags)
