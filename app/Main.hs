@@ -1,13 +1,14 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ViewPatterns #-}
 module Main where
 
 import qualified Data.Map as M
@@ -61,49 +62,66 @@ main :: IO ()
 main = do
   putStrLn "Welcome to the Minecraft Mod developer toolsuite!"
 
-  -- TODO: Don't overwrite existing tags!!
-
-  items  <- loadDhallAsJSON @[Item]  "Items.dhall"
-  blocks <- loadDhallAsJSON @[Block] "Blocks.dhall"
-
-  -- TODO:
-  -- baseTagDefs <- loadDhallAsJSON @[TagDef] "Tags.dhall"
-  -- let baseTagDefs = []
-
   args <- System.Environment.getArgs
+
+  let
+    -- Loads a list of @a@'s from the .dhall file
+    load :: forall a. FromJSON a => FilePath -> IO [a]
+    load file = doesFileExist file >>= \case
+      True -> do
+        putStrLn $ "Loading " ++ file ++ "..."
+        loadDhallAsJSON @[a] file
+      False -> pure []
+
+    -- TODO: Don't overwrite existing tags!!
+
+    loadItems  = load @Item "Items.dhall"
+    loadBlocks = load @Block "Blocks.dhall"
+
+    -- TODO:
+    -- baseTagDefs <- load @TagDef "Tags.dhall"
 
   case args of
     "generate":_ -> do
 
-         files <- runMinecraftWriterT $ do
+       items <- loadItems
+       blocks <- loadBlocks
 
-                    forM_ blocks $ \b -> do
-                      liftIO $ putStrLn $ "Generating block " <> b.modId <> ":" <> b.name
-                      processBlock b
-                      validateTexture b.texture_path
+       files <- runMinecraftWriterT $ do
 
-                    forM_ items $ \i -> do
-                      liftIO $ putStrLn $ "Generating item " <> i.modId <> ":" <> i.name
-                      processItem i
-                      validateTexture i.texture_path
+         forM_ blocks $ \b -> do
+           liftIO $ putStrLn $ "Generating block " <> b.modId <> ":" <> b.name
+           processBlock b
+           validateTexture b.texture_path
 
-         _ <- M.traverseWithKey createDirAndEncodeFile files
-         pure ()
+         forM_ items $ \i -> do
+           liftIO $ putStrLn $ "Generating item " <> i.modId <> ":" <> i.name
+           processItem i
+           validateTexture i.texture_path
+
+       _ <- M.traverseWithKey createDirAndEncodeFile files
+       pure ()
 
     "clean":_  -> do
 
-      files <- runMinecraftWriterT $ do
-                  forM_ blocks processBlock
-                  forM_ items  processItem
+       items <- loadItems
+       blocks <- loadBlocks
 
-      _ <- M.traverseWithKey (\fp _ -> delFile fp) files
+       files <-
+         runMinecraftWriterT $ do
+           forM_ blocks processBlock
+           forM_ items  processItem
 
-      pure ()
+       _ <- M.traverseWithKey (\fp _ -> delFile fp) files
+
+       pure ()
 
     _ -> do
+
       putStrLn
         "Valid args:\n\
-        \  generate: generate all JSONs for items listed in Items.dhall and blocks listed Blocks.dhall"
+        \  generate: generate all JSONs for items listed in Items.dhall and blocks listed Blocks.dhall\n\
+        \  clean: delete all files for Blocks.dhall and Items.dhall by minecraft-dhall"
 
 
 
